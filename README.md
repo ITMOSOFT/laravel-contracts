@@ -5,11 +5,13 @@ Commercial agreement and contract lifecycle management for Laravel applications,
 ## Features
 
 - Polymorphic contract owner and counterparty
-- Contract reference, title, description, value and currency
-- Draft, pending, active, expired, terminated and rejected states
+- Contract reference, title, description, value, currency, and metadata
+- Draft, pending, active, expired, terminated, and rejected states
 - Effective and expiry dates
-- Renewal and termination tracking
+- Transactional activation, termination, and renewal operations
+- Row locking for lifecycle transitions and renewal creation
 - Reusable contract clauses with ordering and metadata
+- Automatic UUID reference generation when omitted
 
 ## Requirements
 
@@ -24,15 +26,46 @@ php artisan vendor:publish --tag=contracts-config
 php artisan migrate
 ```
 
+The service provider is registered through Laravel package auto-discovery.
+
 ## Usage
 
-Use the package's Eloquent model under `ITMOSOFT\\Contracts\\Models\\Contract`. Create records with the required polymorphic relation fields and use the model lifecycle methods documented below.
+```php
+use ITMOSOFT\Contracts\Models\Contract;
 
-### Lifecycle methods
+$contract = Contract::create([
+    'owner_type' => App\Models\Company::class,
+    'owner_id' => $company->id,
+    'counterparty_type' => App\Models\Customer::class,
+    'counterparty_id' => $customer->id,
+    'title' => 'Master Services Agreement',
+    'currency' => 'USD',
+    'contract_value' => '12500.00',
+    'effective_at' => '2026-12-01',
+    'expires_at' => '2027-11-30',
+]);
 
-- `activate()` activates draft/pending contracts.
-- `terminate($reason)` terminates active/pending contracts.
-- `renew($attributes)` creates a separate draft renewal, links it to the source contract, and copies clauses.
+$contract->activate();
+$contract->terminate('Agreement ended');
+
+$renewal = $contract->renew([
+    'title' => 'Master Services Agreement — Renewal',
+    'effective_at' => '2027-12-01',
+    'expires_at' => '2028-11-30',
+]);
+```
+
+## Lifecycle behavior
+
+- `activate()` changes `draft` or `pending` contracts to `active`.
+- `terminate($reason)` changes `active` or `pending` contracts to `terminated`, recording the date and optional reason.
+- `renew($attributes)` creates a separate `draft` contract from an `active` or `expired` contract, links it through `renewed_from_id`, increments `renewal_count`, and copies clauses.
+- Lifecycle operations require a persisted contract and run inside database transactions. Row-level locking is used where supported by the database driver.
+- Invalid state transitions return `false`; attempting to renew an ineligible contract throws `InvalidArgumentException`.
+
+## Validation
+
+The model enforces a non-empty title, supported status, three-letter uppercase currency code, non-negative `DECIMAL(14,2)` contract value, and valid effective/expiry date order. Clause titles and bodies are required. Metadata must be JSON encodable.
 
 ## Important boundaries
 
@@ -42,6 +75,7 @@ This package provides persistence models and lifecycle primitives. It does not p
 
 ```bash
 composer install
+composer validate --strict
 composer test
 ```
 

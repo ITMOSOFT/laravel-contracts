@@ -10,7 +10,7 @@ return new class extends Migration
     {
         Schema::create('contracts', function (Blueprint $table): void {
             $table->id();
-$table->uuid('reference')->unique();
+            $table->uuid('reference')->unique();
             $table->morphs('owner');
             $table->morphs('counterparty');
             $table->string('title');
@@ -37,12 +37,11 @@ $table->uuid('reference')->unique();
             $table->json('metadata')->nullable();
             $table->timestamps();
         });
-
     }
 
     public function down(): void
     {
-Schema::dropIfExists('contract_clauses');
+        Schema::dropIfExists('contract_clauses');
         Schema::dropIfExists('contracts');
     }
 };
